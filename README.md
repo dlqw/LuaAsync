@@ -1,6 +1,6 @@
 # LuaAsync
 
-## Qucik Start
+## Quick Start
 
 ```lua
 require("async")
