@@ -53,4 +53,3 @@ Task.Run(function()
     if (index == 2) then cts:Cancel() end
 end, cts2:GetToken())
 ```
-## license
