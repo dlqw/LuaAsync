@@ -90,3 +90,6 @@ docs/build/
 
 # Claude Code
 .claude/
+
+# Temporary documentation
+CREATE_PR.md
