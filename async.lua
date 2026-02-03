@@ -14,6 +14,14 @@ function Async.Init()
     Async._taskQueue = {}
     Async._pendingTaskQueue = {}
     Async._currentTaskGroup = nil
+
+    -- Memory optimization consideration:
+    -- Task groups hold strong references to tasks until completion.
+    -- For long-running applications with many short-lived tasks, consider:
+    -- 1. Using weak references for completed tasks in task groups
+    -- 2. Implementing a task pool to reuse task objects
+    -- 3. Explicitly clearing task references after completion
+    -- Note: This requires careful design to avoid premature GC of active tasks
 end
 
 ---@param deltaTime number
@@ -22,24 +30,29 @@ function Async.Update(deltaTime)
     table.move(Async._pendingTaskQueue, 1, #Async._pendingTaskQueue, 1, Async._taskQueue)
     Async._pendingTaskQueue = {}
     for _, taskGroup in ipairs(Async._taskQueue) do
+        -- Create a new table each frame to collect continuing tasks
+        -- This ensures clean state and avoids modifying the original taskGroup
         Async._currentTaskGroup = { _cancellationToken = taskGroup._cancellationToken }
-        local hasSuspended = taskGroup._cancellationToken and taskGroup._cancellationToken:IsCancellationRequested()
+        local groupCancelled = taskGroup._cancellationToken and taskGroup._cancellationToken:IsCancellationRequested()
         for i = 1, #taskGroup, 1 do
             local value = taskGroup[i]
-            if hasSuspended then
-                table.insert(Async._currentTaskGroup, value)
+            local isDead = coroutine.status(value._coroutine) == "dead"
+
+            if isDead then
+                -- Task already completed, just trigger completion
+                value:Complete()
+            elseif groupCancelled then
+                -- Task group is cancelled and task is not done - set cancelled status
+                value._result = nil
+                value._status = TaskStatus.Cancelled
+                value:Complete()
+                -- Don't re-insert cancelled tasks
             else
-                if taskGroup._cancellationToken and taskGroup._cancellationToken:IsCancellationRequested() then
-                    hasSuspended = true
+                local isDone, isSuspended = value:_moveNext(deltaTime)
+                if not isDone then
                     table.insert(Async._currentTaskGroup, value)
                 else
-                    local isDone, isSuspended = value:_moveNext(deltaTime)
-                    if not isDone then
-                        hasSuspended = isSuspended
-                        table.insert(Async._currentTaskGroup, value)
-                    else
-                        value:Complete()
-                    end
+                    value:Complete()
                 end
             end
         end
@@ -60,12 +73,20 @@ Waitable.__call = function(self)
     for index, value in ipairs(self._invoker) do
         value()
     end
-    self._invoker = {}
+    self._invoker = nil
     return self
 end
 Waitable.__index = Waitable
-Waitable._invoker = {}
-Waitable._callbacks = {}
+-- Note: Don't set default _invoker and _callbacks on prototype to avoid inheritance issues
+
+---Task Status Enum
+TaskStatus = {
+    Created = "Created",
+    Running = "Running",
+    Completed = "Completed",
+    Cancelled = "Cancelled",
+    Faulted = "Faulted"
+}
 
 ---Task
 Task = {}
@@ -76,14 +97,30 @@ Task.__index = Task
 ---@param cancellationToken table
 ---@return table
 function Task.new(func, cancellationToken)
+    -- Capture debug info for better error messages
+    local debugInfo = ""
+    if debug and debug.getinfo then
+        local info = debug.getinfo(2, "Sl")
+        if info then
+            debugInfo = string.format("created at %s:%d", info.short_src or "?", info.currentline or 0)
+        end
+    end
+
     local task = setmetatable({
         _coroutine = coroutine.create(func),
         _cancellationToken = cancellationToken,
-        _waitable = setmetatable({ _invoker = { Task._coroutine }, _callbacks = {} }, Waitable),
-        _result = nil
+        _waitable = setmetatable({ _invoker = { Task._coroutine }, _callbacks = {}, _result = nil }, Waitable),
+        _result = nil,
+        _hasUsed = false,
+        _status = TaskStatus.Created,
+        _debugInfo = debugInfo
     }, Task);
     task._result = task._waitable._result -- 成员而非继承
     return task
+end
+
+function Task:GetStatus()
+    return self._status
 end
 
 ---@return boolean isDone
@@ -91,20 +128,29 @@ end
 function Task:_moveNext(deltaTime)
     if self._cancellationToken ~= nil then
         if self._cancellationToken:IsCancellationRequested() then
+            self._result = nil
+            self._status = TaskStatus.Cancelled
             return true, false
         end
     end
 
+    self._status = TaskStatus.Running
     local success, result = coroutine.resume(self._coroutine, deltaTime)
 
     self._result = result
 
     if not success then
+        self._status = TaskStatus.Faulted
         error(result)
         return true, false
     end
 
-    return coroutine.status(self._coroutine) == "dead", coroutine.status(self._coroutine) == "suspended"
+    local isDead = coroutine.status(self._coroutine) == "dead"
+    if isDead then
+        self._status = TaskStatus.Completed
+    end
+
+    return isDead, coroutine.status(self._coroutine) == "suspended"
 end
 
 function Task:setWaitable(waitable)
@@ -117,19 +163,24 @@ function Task:OnCompleted(callback)
 end
 
 Task.__call = function(self)
-    return self:StartAsSub()
+    return self:Start()
 end
 
 function Waitable:OnCompleted(callback)
+    if not self._callbacks then
+        self._callbacks = {}
+    end
     table.insert(self._callbacks, callback)
     return self
 end
 
 function Waitable:Complete()
-    for index, value in ipairs(self._callbacks) do
-        value()
+    if self._callbacks then
+        for index, value in ipairs(self._callbacks) do
+            value()
+        end
+        self._callbacks = nil  -- Consistent with _invoker = nil in __call
     end
-    self._callbacks = {}
     return self
 end
 
@@ -138,13 +189,28 @@ function Task:Complete()
     return self
 end
 
-function Waitable:ToTask()
+function Waitable:ToTask(cancellationToken)
     return Task.new(function()
         Await(self)
-    end, self._cancellationToken)
+    end, cancellationToken or self._cancellationToken)
 end
 
 ---Core
+
+---创建一个已经完成的Task对象
+---@param result any
+---@return table task
+function Task.FromResult(result)
+    local task = setmetatable({
+        _coroutine = nil,
+        _cancellationToken = nil,
+        _waitable = setmetatable({ _invoker = nil, _callbacks = nil, _result = result }, Waitable),
+        _result = result,
+        _hasUsed = true,
+        _status = TaskStatus.Completed
+    }, Task)
+    return task
+end
 
 ---将传入工作加入队列, 并返回一个Task对象
 ---@param func function
@@ -161,7 +227,11 @@ end
 ---@return table task
 function Task:Start()
     if self._hasUsed then
-        error("Task " .. tostring(self) .. " is already completed")
+        local msg = "Task is already started or completed"
+        if self._debugInfo and self._debugInfo ~= "" then
+            msg = msg .. " (" .. self._debugInfo .. ")"
+        end
+        error(msg)
         return self
     end
     self._hasUsed = true
@@ -190,7 +260,11 @@ end
 ---@return table task
 function Task:StartAsSub()
     if self._hasUsed then
-        error("Task " .. tostring(self) .. " is already completed")
+        local msg = "Task is already started or completed"
+        if self._debugInfo and self._debugInfo ~= "" then
+            msg = msg .. " (" .. self._debugInfo .. ")"
+        end
+        error(msg)
         return self
     end
     self._hasUsed = true
@@ -223,7 +297,10 @@ end
 
 ---@return table waitable
 function Task.NextFrame(cancellationToken)
-    local waitable = setmetatable({}, Waitable)
+    local waitable = setmetatable({
+        _callbacks = {},
+        _result = nil
+    }, Waitable)
     waitable._invoker = { function()
         Task.RunAsSub(function()
             coroutine.yield()
@@ -236,7 +313,9 @@ end
 function Task.Delay(milliseconds, cancellationToken)
     local waitable = setmetatable({
         _timer = 0,
-        _duration = milliseconds / 1000
+        _duration = milliseconds / 1000,
+        _callbacks = {},
+        _result = nil
     }, Waitable)
     waitable._invoker = { function()
         Task.RunAsSub(function()
@@ -251,7 +330,10 @@ end
 ---@param condition function
 ---@return table waitable
 function Task.Until(condition, cancellationToken)
-    local waitable = setmetatable({}, Waitable)
+    local waitable = setmetatable({
+        _callbacks = {},
+        _result = nil
+    }, Waitable)
     waitable._invoker = { function()
         Task.RunAsSub(function()
             while not condition() do
@@ -280,7 +362,10 @@ function Task.WhenAll(cancellationToken, ...)
                 waitable._completedCount = waitable._completedCount - 1
                 waitable._result[index] = task._result
             end)
-            task:Start()
+            -- Only start task if not already started
+            if not task._hasUsed then
+                task:Start()
+            end
         end
 
         Task.RunAsSub(function()
@@ -313,7 +398,10 @@ function Task.WhenAny(cancellationToken, ...)
                     waitable._first = index
                 end
             end)
-            task:Start()
+            -- Only start task if not already started
+            if not task._hasUsed then
+                task:Start()
+            end
         end
 
         Task.RunAsSub(function()

@@ -1,10 +1,20 @@
-# Compiled Lua sources
+# Lua compiled files
+*.luac
+*.lua.c
 luac.out
 
-# luarocks build files
+# LuaRocks
+luarocks/
+
+# LuaRocks build files
 *.src.rock
 *.zip
 *.tar.gz
+
+# Dependencies
+lua_modules/
+.rock/
+.rocktree/
 
 # Object files
 *.o
@@ -25,6 +35,42 @@ luac.out
 *.def
 *.exp
 
+# Editor and IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+
+# Editor backup files
+*.bak
+*.backup
+*.tmp
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+logs/
+
+# Test coverage
+luacov.*
+luacov.stats.out
+
+# Build artifacts
+build/
+dist/
+
 # Shared objects (inc. Windows DLLs)
 *.dll
 *.so
@@ -39,3 +85,12 @@ luac.out
 *.x86_64
 *.hex
 
+# Documentation build
+docs/build/
+
+# Claude Code
+.claude/
+CLAUDE.md
+
+# Temporary documentation
+CREATE_PR.md
