@@ -6,7 +6,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Lua](https://img.shields.io/badge/Lua-5.1+-blue.svg)](https://www.lua.org/)
-[![Performance](https://img.shields.io/badge/性能-238K%20任务%2Fs-brightgreen.svg)](benchmark_async.lua)
+[![Performance](https://img.shields.io/badge/性能-200K%2B%20任务%2Fs-brightgreen.svg)](benchmark_async.lua)
 
 </div>
 
@@ -257,21 +257,37 @@ $ lua test_async.lua
 
 $ lua memory_test.lua
 ✓ 所有内存测试通过 - 未检测到显著泄漏
-
-$ lua benchmark_async.lua
-✓ 任务创建: 0.0031 ms
-✓ 调度吞吐量: 238,095 任务/秒
-✓ FromResult 速度: 2,439,024 任务/秒
 ```
 
 ## 📊 性能
 
-| 指标 | 数值 | 评级 |
-|------|------|------|
-| 任务创建 | ~0.003ms | ⭐⭐⭐⭐⭐ |
-| 调度吞吐量 | ~238,000 任务/秒 | ⭐⭐⭐⭐⭐ |
-| FromResult | ~2,400,000 任务/秒 | ⭐⭐⭐⭐⭐ |
-| 内存使用 | 无泄漏 | ⭐⭐⭐⭐⭐ |
+基于 **5 次连续基准测试**的性能数据，在 Windows/Cygwin 上运行 10,000 次迭代：
+
+### 基准测试结果
+
+| 指标 | 平均值 | 范围 | 评级 |
+|------|--------|------|------|
+| 任务创建 | 0.0038ms | 0.0033-0.0042ms | ⭐⭐⭐⭐⭐ |
+| 调度吞吐量 | 215,634 任务/秒 | 163,934-256,410 | ⭐⭐⭐⭐⭐ |
+| FromResult | 2,173,913 任务/秒 | 2,000,000+ | ⭐⭐⭐⭐⭐ |
+| 内存泄漏 | 未检测到 | - | ⭐⭐⭐⭐⭐ |
+
+### 实际测试数据
+
+```
+=== 5 次连续基准测试运行 ===
+
+第 1 次: 227,273 任务/秒, 0.0033ms/任务
+第 2 次: 222,222 任务/秒, 0.0042ms/任务
+第 3 次: 163,934 任务/秒, 0.0041ms/任务  (最低)
+第 4 次: 208,333 任务/秒, 0.0038ms/任务
+第 5 次: 256,410 任务/秒, 0.0038ms/任务  (最高)
+
+平均值:  215,634 任务/秒, 0.0038ms/任务
+标准差:  ±32,610 任务/秒 (±15% 波动)
+```
+
+> **注意**：性能会因系统负载、Lua 版本和硬件而异。所示结果为现代 Windows 系统上的典型值。
 
 ## 🎯 用途
 
