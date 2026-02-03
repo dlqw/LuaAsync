@@ -1,0 +1,56 @@
+# Lua compiled files
+*.luac
+*.lua.c
+
+# LuaRocks
+luarocks/
+
+# Dependencies
+lua_modules/
+.rock/
+.rocktree/
+
+# Editor and IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+
+# Editor backup files
+*.bak
+*.backup
+*.tmp
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+logs/
+
+# Test coverage
+luacov.*
+luacov.stats.out
+
+# Build artifacts
+build/
+dist/
+*.so
+*.dylib
+*.dll
+
+# Documentation build
+docs/build/
+
+# Claude Code
+.claude/
