@@ -1,14 +1,39 @@
 # Lua compiled files
 *.luac
 *.lua.c
+luac.out
 
 # LuaRocks
 luarocks/
+
+# LuaRocks build files
+*.src.rock
+*.zip
+*.tar.gz
 
 # Dependencies
 lua_modules/
 .rock/
 .rocktree/
+
+# Object files
+*.o
+*.os
+*.ko
+*.obj
+*.elf
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Libraries
+*.lib
+*.a
+*.la
+*.lo
+*.def
+*.exp
 
 # Editor and IDE files
 .vscode/
@@ -45,9 +70,20 @@ luacov.stats.out
 # Build artifacts
 build/
 dist/
-*.so
-*.dylib
+
+# Shared objects (inc. Windows DLLs)
 *.dll
+*.so
+*.so.*
+*.dylib
+
+# Executables
+*.exe
+*.out
+*.app
+*.i*86
+*.x86_64
+*.hex
 
 # Documentation build
 docs/build/
